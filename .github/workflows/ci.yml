@@ -55,10 +55,16 @@ jobs:
         run: |
           G=.gate; [ -x .gate/loops/spec-check/run ] || { echo "::warning::spec-check comes from this pull request: review loops/ by hand"; G=.; }
           "$G/loops/spec-check/run" .
-      - name: acceptance gate
+      - name: acceptance tests (they run the pull request's code)
         run: |
           G=.gate; [ -x .gate/loops/acceptance/run ] || { echo "::warning::the acceptance gate comes from this pull request: review loops/ by hand"; G=.; }
-          "$G/loops/acceptance/collect" . "$RUNNER_TEMP/acceptance" && "$G/loops/acceptance/run" "$RUNNER_TEMP/acceptance"
+          "$G/loops/acceptance/collect" . "$RUNNER_TEMP/acceptance"
+      - name: the gate is as the base has it
+        run: git -C .gate diff --quiet HEAD -- && test -z "$(git -C .gate status --porcelain)" || { echo "::error::.gate changed during this job"; exit 1; }
+      - name: acceptance gate
+        run: |
+          G=.gate; [ -x .gate/loops/acceptance/run ] || G=.
+          "$G/loops/acceptance/run" "$RUNNER_TEMP/acceptance"
 
   # The gate of the maintenance super-loop, for a pull request from a maint/ branch: no test, spec or expected value
   # changed, and the measure improved (loops/behaviour-invariance).

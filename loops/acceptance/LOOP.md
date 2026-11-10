@@ -61,6 +61,7 @@ TEAMS-1#3: no test — S01/a name of 61 characters is refused
 | must-fire/no-record-before-the-work | fires | Nobody recorded the run before the work |
 | must-fire/tag-not-in-the-spec | fires | A test is tagged with an example the spec does not have |
 | must-fire/tests-do-not-build | fires | The acceptance tests do not compile |
+| must-fire/test-lines-say-pass-but-the-package-failed | fires | Every test line says pass, the package failed |
 | must-pass/all-green | passes | Red before, green now, nothing changed; a draft requirement is ignored |
 
 ## Wiring
@@ -71,3 +72,12 @@ TEAMS-1#3: no test — S01/a name of 61 characters is refused
   it reads its evidence from the repository under test.
 - `red-before.json` and `oracle.json` are recorded locally when the tests are written and red, and committed with
   them. The implementing agent may not change `specs/` or `acceptance/`; the gate in CI tells when it did.
+
+## Notes
+
+- The acceptance tests run the pull request's code (the tests, and the app inside them) in the job that judges it.
+  The gate keeps three guards: it runs as the base branch has it; it checks that `.gate` is unchanged right before the
+  verdict; and it needs the test package to pass as a whole, so a forged `--- PASS` line cannot turn a failure green.
+  Left open: a process the tests leave behind could still change the snapshot after the check. The full fix is a job
+  of its own for the tests and another for the verdict, with branch protection that requires both and a review of
+  `loops/` and `.github/` by a person.
