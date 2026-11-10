@@ -47,3 +47,16 @@ jobs:
         run: loops/spec-check/run .
       - name: acceptance gate
         run: loops/acceptance/collect . "$RUNNER_TEMP/acceptance" && loops/acceptance/run "$RUNNER_TEMP/acceptance"
+
+  # The gate of the maintenance super-loop, for a pull request from a maint/ branch: no test, spec or expected value
+  # changed, and the measure improved (loops/behaviour-invariance).
+  maintenance:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'maint/')
+    runs-on: ubuntu-latest
+    env:
+      BASE: origin/${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: loops/behaviour-invariance/collect . "$BASE" "$RUNNER_TEMP/invariance" && loops/behaviour-invariance/run "$RUNNER_TEMP/invariance"

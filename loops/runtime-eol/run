@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Judge the runtimes' support from a snapshot of `collect`: one line per runtime, and exit 1 when one is past its
+end of life, within 90 days of it, or unknown to endoflife.date.
+
+    run SNAPSHOT_DIR
+
+The days of support left are the measure that a maintenance change of the runtime improves (behaviour-invariance
+reads it). A runtime with no end of life announced yet counts as supported. Standard library only; Python 3.9.
+"""
+import datetime
+import json
+import pathlib
+import sys
+
+WARN_DAYS = 90
+
+
+def days_left(runtime, today):
+    eol = runtime.get("eol")
+    if eol is False or eol is None:
+        return None  # no end of life announced yet
+    return (datetime.date.fromisoformat(str(eol)) - today).days
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit(__doc__)
+    d = pathlib.Path(argv[1])
+    try:
+        runtimes = json.loads((d / "runtimes.json").read_text(encoding="utf-8"))
+        today = datetime.date.fromisoformat(json.loads((d / "today.json").read_text(encoding="utf-8"))["today"])
+    except (OSError, ValueError, KeyError) as e:
+        print("snapshot: broken — %s" % e)
+        return 2
+    failed = False
+    for r in runtimes:
+        name = "%s %s (%s)" % (r["name"], r["cycle"], r["from"])
+        left = days_left(r, today)
+        if not r.get("known"):
+            failed = True
+            print("%s: unknown to endoflife.date — check the version" % name)
+        elif left is None:
+            print("%s: supported, no end of life announced; latest %s" % (name, r.get("latest")))
+        elif left < 0:
+            failed = True
+            print("%s: past its end of life on %s, %d days ago — move to a supported version (latest of this line: %s)"
+                  % (name, r["eol"], -left, r.get("latest")))
+        elif left < WARN_DAYS:
+            failed = True
+            print("%s: ends support on %s, in %d days — plan the move now" % (name, r["eol"], left))
+        else:
+            print("%s: supported until %s, %d days left" % (name, r["eol"], left))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

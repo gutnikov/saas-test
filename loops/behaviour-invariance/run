@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""The gate of maintenance: a change that keeps the behaviour and improves its measure.
+
+    run SNAPSHOT_DIR     (OUT of collect: changes.json, measure.json)
+
+Fires on a changed test, acceptance test, spec, snapshot or golden file: an expected value changed, so this is not
+maintenance and goes back to triage. Fires when the measure did not improve. Exit 0 when the change is invariant
+and the measure improved. Standard library only; Python 3.9.
+"""
+import json
+import pathlib
+import re
+import sys
+
+EXPECTED = re.compile(r"(_test\.go$|^acceptance/|^specs/|/testdata/|__snapshots__/|\.golden$|\.(test|spec)\.[jt]sx?$)")
+
+
+def better(before, after):
+    """None is unlimited: no end of life announced."""
+    if before is None:
+        return False
+    return after is None or after > before
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit(__doc__)
+    d = pathlib.Path(argv[1])
+    try:
+        changes = json.loads((d / "changes.json").read_text(encoding="utf-8"))
+        measure = json.loads((d / "measure.json").read_text(encoding="utf-8"))
+        before, after = measure["before"], measure["after"]
+    except (OSError, ValueError, KeyError) as e:
+        print("snapshot: broken — %s" % e)
+        return 2
+    failed = False
+    for f in changes:
+        if EXPECTED.search(f):
+            failed = True
+            print("expected value changed: %s — this is not maintenance; back to triage" % f)
+    line = "%s: %s → %s" % (measure["name"], "; ".join(before["detail"]), "; ".join(after["detail"]))
+    if better(before["value"], after["value"]):
+        print("measure improved — %s" % line)
+    else:
+        failed = True
+        print("measure not improved — %s" % line)
+    if not failed:
+        print("invariant: %d files changed, none of them a test, a spec or an expected value" % len(changes))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

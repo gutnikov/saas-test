@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Collect the runtimes this project builds and runs on, with their end of life, for ./run to judge.
+
+    collect REPO OUT     write OUT/runtimes.json and OUT/today.json
+
+Node: the major version in REPO/.nvmrc, or else the node-version of the CI workflow. Go: the `go` line of go.mod.
+The end of life comes from endoflife.date. Standard library only; Python 3.9.
+"""
+import datetime
+import json
+import pathlib
+import re
+import sys
+import urllib.request
+
+
+def node(repo):
+    nvmrc = repo / ".nvmrc"
+    if nvmrc.exists():
+        m = re.match(r"v?(\d+)", nvmrc.read_text(encoding="utf-8").strip())
+        if m:
+            return m.group(1), ".nvmrc"
+    ci = repo / ".github" / "workflows" / "ci.yml"
+    m = re.search(r"node-version:\s*['\"]?(\d+)", ci.read_text(encoding="utf-8")) if ci.exists() else None
+    return (m.group(1), ".github/workflows/ci.yml") if m else (None, None)
+
+
+def go(repo):
+    mod = repo / "go.mod"
+    m = re.search(r"^go (\d+\.\d+)", mod.read_text(encoding="utf-8"), re.M) if mod.exists() else None
+    return (m.group(1), "go.mod") if m else (None, None)
+
+
+def schedule(product):
+    with urllib.request.urlopen("https://endoflife.date/api/%s.json" % product, timeout=20) as r:
+        return {str(c["cycle"]): c for c in json.load(r)}
+
+
+def main(argv):
+    if len(argv) != 3:
+        sys.exit(__doc__)
+    repo, out = pathlib.Path(argv[1]).resolve(), pathlib.Path(argv[2])
+    runtimes = []
+    for name, product, (cycle, source) in (("node", "nodejs", node(repo)), ("go", "go", go(repo))):
+        if cycle:
+            c = schedule(product).get(cycle)
+            runtimes.append({"name": name, "cycle": cycle, "from": source, "known": c is not None,
+                             "eol": (c or {}).get("eol"), "latest": (c or {}).get("latest")})
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "runtimes.json").write_text(json.dumps(runtimes, indent=1) + "\n", encoding="utf-8")
+    (out / "today.json").write_text(json.dumps({"today": datetime.date.today().isoformat()}) + "\n",
+                                    encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

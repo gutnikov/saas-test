@@ -38,7 +38,7 @@ tools:
 super_loops:
   delivery: "requests from the user in the session; no issues on GitHub yet"
   remediation: "a person who notices; nothing reads the production log"
-  maintenance: "nothing: no dependency bot and no scheduled job, while Node 20 is past its end of life and GitHub warns that ubuntu-latest moves to Ubuntu 26"
+  maintenance: "the weekly runtime-eol workflow, for the runtimes' end of life; no dependency bot yet"
 not_here:
   discovery: "every idea the user brings gets built; there are no prototypes and no decision records"
 
