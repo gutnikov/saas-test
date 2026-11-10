@@ -75,11 +75,19 @@ switch_to() { # switch_to VERSION: restart the server, and the traffic if it run
   if [ -n "$traffic_on" ]; then traffic start; fi
 }
 
-build_release() { # build_release REF VERSION: the binaries of REF into releases/VERSION
+use_node() { # the Node that .nvmrc names, through nvm, when both are there; otherwise the Node on the PATH
+  if [ -f .nvmrc ] && [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+    set +u
+    . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+    nvm use --silent >/dev/null
+  fi
+}
+
+build_release() { # build_release REF VERSION: the binaries of REF into releases/VERSION, with the Node of its .nvmrc
   local tmp
   tmp="$(mktemp -d)"
   git -C "$REPO" worktree add --quiet --detach "$tmp/src" "$1"
-  if ! make -C "$tmp/src" web build VERSION="$2" >"$tmp/build.log" 2>&1; then
+  if ! (cd "$tmp/src" && use_node && echo "node $(node --version)" && make web build VERSION="$2") >"$tmp/build.log" 2>&1; then
     cat "$tmp/build.log" >&2
     git -C "$REPO" worktree remove --force "$tmp/src"
     exit 1

@@ -18,7 +18,7 @@ features yet; they come through the delivery super-loop.
 
 ## Develop
 
-Go 1.26 and Node 20.19 or later.
+Go 1.26 and Node 26 (`.nvmrc`; with nvm, `nvm use`).
 
 ```
 make ci          # what CI runs: the frontend build, gofmt, go vet, go test, the binaries
