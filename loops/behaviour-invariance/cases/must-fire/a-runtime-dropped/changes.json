@@ -1,0 +1,7 @@
+[
+ ".nvmrc",
+ ".github/workflows/ci.yml",
+ "web/package.json",
+ "ops/prod",
+ "README.md"
+]

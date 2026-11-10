@@ -67,5 +67,7 @@ TEAMS-1#3: no test — S01/a name of 61 characters is refused
 
 - `.github/workflows/ci.yml`, job `acceptance`, step `acceptance gate`: `collect . $RUNNER_TEMP/acceptance` and `run`
   on it, on every push to `main` and every pull request, after `spec-check`.
+- The gate runs as the base branch has it (a worktree at `.gate`), so the pull request it judges cannot weaken it;
+  it reads its evidence from the repository under test.
 - `red-before.json` and `oracle.json` are recorded locally when the tests are written and red, and committed with
   them. The implementing agent may not change `specs/` or `acceptance/`; the gate in CI tells when it did.

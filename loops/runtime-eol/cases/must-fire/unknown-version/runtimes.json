@@ -1,0 +1,18 @@
+[
+ {
+  "name": "node",
+  "cycle": "19",
+  "from": ".nvmrc",
+  "known": false,
+  "eol": null,
+  "latest": null
+ },
+ {
+  "name": "go",
+  "cycle": "1.26",
+  "from": "go.mod",
+  "known": true,
+  "eol": false,
+  "latest": "1.26.10"
+ }
+]

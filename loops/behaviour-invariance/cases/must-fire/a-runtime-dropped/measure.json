@@ -1,0 +1,30 @@
+{
+ "name": "days of support left of the runtimes",
+ "before": {
+  "runtimes": {
+   "go": {
+    "cycle": "1.26",
+    "days": null
+   },
+   "node": {
+    "cycle": "20",
+    "days": -194
+   }
+  },
+  "detail": [
+   "go 1.26: no end of life announced",
+   "node 20: -194 days"
+  ]
+ },
+ "after": {
+  "runtimes": {
+   "go": {
+    "cycle": "1.26",
+    "days": null
+   }
+  },
+  "detail": [
+   "go 1.26: no end of life announced"
+  ]
+ }
+}
