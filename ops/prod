@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# The local production of saas-test.
+#
+#   ops/prod deploy [REF]      build REF (default origin/main) and make it the running release
+#   ops/prod rollback          make the previous release the running one again
+#   ops/prod start | stop | status
+#   ops/prod logs [N]          the last N lines of the server's log (default 20)
+#   ops/prod traffic start | stop
+#
+# Everything lives outside the repository, in $SAAS_PROD_HOME (default ~/.saas-test/prod):
+#   releases/<version>/   the binaries of every deployed version
+#   current, previous     links to the running release and the one before it
+#   data/app.db           the production database
+#   logs/app.jsonl        the server's JSON log; every line carries the version
+#   deploys.jsonl         one line per deploy and rollback, with its result
+set -euo pipefail
+
+PROD="${SAAS_PROD_HOME:-$HOME/.saas-test/prod}"
+ADDR="${SAAS_PROD_ADDR:-127.0.0.1:18080}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+
+mkdir -p "$PROD/releases" "$PROD/data" "$PROD/logs"
+
+alive() { [ -f "$PROD/$1.pid" ] && kill -0 "$(cat "$PROD/$1.pid")" 2>/dev/null; }
+
+release_of() { if [ -L "$PROD/$1" ]; then basename "$(readlink "$PROD/$1")"; fi; }
+
+start() {
+  if alive server; then echo "already running: pid $(cat "$PROD/server.pid")"; return; fi
+  [ -x "$PROD/current/server" ] || { echo "nothing is deployed yet: ops/prod deploy" >&2; exit 1; }
+  ADDR="$ADDR" DB_PATH="$PROD/data/app.db" nohup "$PROD/current/server" >>"$PROD/logs/app.jsonl" 2>&1 &
+  echo $! >"$PROD/server.pid"
+}
+
+stop() {
+  if alive server; then
+    kill "$(cat "$PROD/server.pid")"
+    for _ in $(seq 50); do alive server || break; sleep 0.1; done
+  fi
+  rm -f "$PROD/server.pid"
+}
+
+healthy() { # healthy VERSION: /healthz answers ok with that version within 10 seconds
+  for _ in $(seq 50); do
+    if curl -fsS "http://$ADDR/healthz" 2>/dev/null | grep -q "\"version\":\"$1\""; then return 0; fi
+    sleep 0.2
+  done
+  return 1
+}
+
+record() { # record ACTION VERSION PREVIOUS RESULT
+  printf '{"at":"%s","action":"%s","version":"%s","previous":"%s","result":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "$4" >>"$PROD/deploys.jsonl"
+}
+
+switch_to() { # switch_to VERSION: restart the server, and the traffic if it runs, on that release
+  local was traffic_on=""
+  was="$(release_of current)"
+  if alive traffic; then traffic_on=1; traffic stop; fi
+  stop
+  if [ -n "$was" ] && [ "$was" != "$1" ]; then ln -sfn "$PROD/releases/$was" "$PROD/previous"; fi
+  ln -sfn "$PROD/releases/$1" "$PROD/current"
+  start
+  if [ -n "$traffic_on" ]; then traffic start; fi
+}
+
+build_release() { # build_release REF VERSION: the binaries of REF into releases/VERSION
+  local tmp
+  tmp="$(mktemp -d)"
+  git -C "$REPO" worktree add --quiet --detach "$tmp/src" "$1"
+  if ! make -C "$tmp/src" web build VERSION="$2" >"$tmp/build.log" 2>&1; then
+    cat "$tmp/build.log" >&2
+    git -C "$REPO" worktree remove --force "$tmp/src"
+    exit 1
+  fi
+  mkdir -p "$PROD/releases/$2"
+  cp "$tmp/src/bin/server" "$tmp/src/bin/traffic" "$PROD/releases/$2/"
+  git -C "$REPO" worktree remove --force "$tmp/src"
+  rm -rf "$tmp"
+}
+
+deploy() {
+  local ref="${1:-origin/main}" version was
+  if git -C "$REPO" remote get-url origin >/dev/null 2>&1; then git -C "$REPO" fetch --quiet origin; fi
+  version="$(git -C "$REPO" rev-parse --short "$ref")"
+  [ -x "$PROD/releases/$version/server" ] || build_release "$ref" "$version"
+  was="$(release_of current)"
+  switch_to "$version"
+  if healthy "$version"; then
+    record deploy "$version" "$was" ok
+    echo "deployed $version (previous: ${was:-none})"
+    return
+  fi
+  record deploy "$version" "$was" unhealthy
+  echo "release $version did not become healthy" >&2
+  if [ -n "$was" ]; then
+    switch_to "$was"
+    if healthy "$was"; then record rollback "$was" "$version" ok; else record rollback "$was" "$version" unhealthy; fi
+    echo "rolled back to $was" >&2
+  fi
+  exit 1
+}
+
+rollback() {
+  local to now
+  to="$(release_of previous)"
+  now="$(release_of current)"
+  [ -n "$to" ] || { echo "there is no previous release" >&2; exit 1; }
+  switch_to "$to"
+  if healthy "$to"; then
+    record rollback "$to" "$now" ok
+    echo "rolled back to $to (from $now)"
+  else
+    record rollback "$to" "$now" unhealthy
+    echo "release $to did not become healthy" >&2
+    exit 1
+  fi
+}
+
+status() {
+  if alive server; then
+    echo "server: running, pid $(cat "$PROD/server.pid"), release $(release_of current)"
+    echo "healthz: $(curl -fsS "http://$ADDR/healthz" 2>/dev/null || echo 'no answer')"
+  else
+    echo "server: stopped, current release ${PROD}/current -> $(release_of current)"
+  fi
+  if alive traffic; then echo "traffic: running, pid $(cat "$PROD/traffic.pid")"; else echo "traffic: stopped"; fi
+}
+
+traffic() {
+  case "${1:-}" in
+    start)
+      if alive traffic; then echo "traffic is already running"; return; fi
+      nohup "$PROD/current/traffic" -base "http://$ADDR" >>"$PROD/logs/traffic.log" 2>&1 &
+      echo $! >"$PROD/traffic.pid"
+      ;;
+    stop)
+      if alive traffic; then kill "$(cat "$PROD/traffic.pid")"; fi
+      rm -f "$PROD/traffic.pid"
+      ;;
+    *) echo "usage: ops/prod traffic start|stop" >&2; exit 2 ;;
+  esac
+}
+
+case "${1:-}" in
+  deploy) shift; deploy "$@" ;;
+  rollback) rollback ;;
+  start) start ;;
+  stop) stop ;;
+  status) status ;;
+  logs) tail -n "${2:-20}" "$PROD/logs/app.jsonl" ;;
+  traffic) shift; traffic "$@" ;;
+  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
