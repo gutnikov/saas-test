@@ -1,0 +1,20 @@
+{
+ "version": "bbbbbbb",
+ "previous": "aaaaaaa",
+ "running": "bbbbbbb",
+ "deployed_at": "2026-11-10T11:00:00+00:00",
+ "ended_at": "2026-11-10T11:21:00+00:00",
+ "minutes": 21.0,
+ "min_minutes": 20,
+ "min_events": 50,
+ "cap_minutes": 60,
+ "signals": [
+  {
+   "name": "serves requests",
+   "match": {
+    "msg": "http request"
+   },
+   "min": 50
+  }
+ ]
+}

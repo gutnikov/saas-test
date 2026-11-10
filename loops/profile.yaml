@@ -1,0 +1,58 @@
+# The project's profile: what the harness engineer found in the project and what the user answered at setup.
+#
+# The map of the super-loops and the loops are chosen from it (the plugin's profile.md, "From the profile to the map
+# and the loops"). Keep it current: when the project changes, update this file from what you see instead of asking
+# again.
+#
+# A place is <super-loop>/<phase>, such as delivery/confirmation (the plugin's super-loops/README.md).
+
+version: 1
+
+# What the project ships, one or more of: web, api, mobile, library, data, llm, infra.
+kind: [web, api]
+
+# The project's own commands, as found in the repository.
+stack:
+  languages: [go, typescript]
+  build: make build
+  test: make test
+  lint: "make vet fmt-check (go vet, gofmt); the frontend has tsc in make web, and no linter"
+
+# Where a change goes after the agent writes it, besides edit, local, commit, task and continuous, which are always
+# there. Values from a loop's trigger: ci, scheduled, preview, staging, production.
+stages: [ci, production]
+
+# What the agent can use from its own session, each checked with one real call.
+# Keys: ci, logs, errors, metrics, traces, browser, deploy. Value: what and how, e.g. "GitLab CI via glab".
+# Leave out what the agent cannot reach.
+tools:
+  ci: "GitHub Actions via gh; gh run list answers"
+  logs: "the production log ~/.saas-test/prod/logs/app.jsonl: JSON lines, each with the version; ops/prod logs N"
+  deploy: "ops/prod deploy, rollback and status, run from this session"
+
+# The super-loops the project has work for, each with where its work comes from now, e.g.
+#   delivery: "Jira tickets of the PAY project"
+#   remediation: "Sentry alerts; nothing else watches production"
+# Keys: delivery, remediation, maintenance, discovery. A super-loop with no work in this project goes under
+# not_here instead, with the reason, e.g. discovery: "every idea the product team brings gets built".
+super_loops:
+  delivery: "requests from the user in the session; no issues on GitHub yet"
+  remediation: "a person who notices; nothing reads the production log"
+  maintenance: "nothing: no dependency bot and no scheduled job, while Node 20 is past its end of life and GitHub warns that ubuntu-latest moves to Ubuntu 26"
+not_here:
+  discovery: "every idea the user brings gets built; there are no prototypes and no decision records"
+
+# Where a change ends now: the last stage it reaches, and what confirms it there, e.g.
+# "production, by the deploy job; nothing confirms it after the deploy".
+ends_at: "production, deployed by hand with ops/prod deploy; only /healthz answering with the new version confirms it"
+
+# The checks the project already runs: what, where it runs, and its places, e.g.
+#   - "golangci-lint, CI job lint: delivery/work remediation/work maintenance/work"
+# Reused, not rebuilt.
+existing_checks:
+  - "make ci: delivery/work remediation/work maintenance/work — by hand; gofmt, go vet, go test, the frontend built with tsc"
+  - "CI job ci: delivery/work remediation/work maintenance/work — make ci on every push to main and every pull request"
+  - "ops/prod /healthz: delivery/release remediation/release maintenance/release — the deploy waits for /healthz to answer with the new version, and switches back if it does not"
+
+pains:
+  - "escapes: delivery/confirmation — delivery must end on a fact confirmed in production, the release running and the log clean for a window such as 20 minutes; today nothing checks a release after /healthz (named by the user on 2026-11-10)"

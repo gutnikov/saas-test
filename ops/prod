@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
 # The local production of saas-test.
 #
-#   ops/prod deploy [REF]      build REF (default origin/main) and make it the running release
-#   ops/prod rollback          make the previous release the running one again
+#   ops/prod deploy [REF] [--wait]   build REF (default origin/main), make it the running release, and confirm it:
+#                                    in the background, or in the foreground with --wait
+#   ops/prod confirm                 confirm the running release: wait for its window, judge it, roll back if broken
+#   ops/prod rollback                make the previous release the running one again
 #   ops/prod start | stop | status
-#   ops/prod logs [N]          the last N lines of the server's log (default 20)
+#   ops/prod logs [N]                the last N lines of the server's log (default 20)
 #   ops/prod traffic start | stop
 #
+# The confirmation is the loop loops/release-confirmation. Its window is at least $SAAS_CONFIRM_MINUTES minutes
+# (default 20) and $SAAS_CONFIRM_EVENTS requests (default 50), and at most $SAAS_CONFIRM_CAP minutes (default 60).
+# A release names the signals it must show in ops/release-signals.json: [{"name", "match": {log fields}, "min"}].
+#
 # Everything lives outside the repository, in $SAAS_PROD_HOME (default ~/.saas-test/prod):
-#   releases/<version>/   the binaries of every deployed version
+#   releases/<version>/   the binaries of every deployed version, and signals.json when the release names signals
 #   current, previous     links to the running release and the one before it
 #   data/app.db           the production database
 #   logs/app.jsonl        the server's JSON log; every line carries the version
-#   deploys.jsonl         one line per deploy and rollback, with its result
+#   confirmations/        a snapshot of every window that was judged, with its verdict
+#   deploys.jsonl         one line per deploy, rollback and confirmation, with its result
 set -euo pipefail
 
 PROD="${SAAS_PROD_HOME:-$HOME/.saas-test/prod}"
 ADDR="${SAAS_PROD_ADDR:-127.0.0.1:18080}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+LOOP="$REPO/loops/release-confirmation"
+CONFIRM_MINUTES="${SAAS_CONFIRM_MINUTES:-20}"
+CONFIRM_EVENTS="${SAAS_CONFIRM_EVENTS:-50}"
+CONFIRM_CAP="${SAAS_CONFIRM_CAP:-60}"
 
 mkdir -p "$PROD/releases" "$PROD/data" "$PROD/logs"
 
@@ -48,9 +59,9 @@ healthy() { # healthy VERSION: /healthz answers ok with that version within 10 s
   return 1
 }
 
-record() { # record ACTION VERSION PREVIOUS RESULT
-  printf '{"at":"%s","action":"%s","version":"%s","previous":"%s","result":"%s"}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "$4" >>"$PROD/deploys.jsonl"
+record() { # record ACTION VERSION PREVIOUS RESULT [EVIDENCE]
+  printf '{"at":"%s","action":"%s","version":"%s","previous":"%s","result":"%s","evidence":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "$4" "${5:-}" >>"$PROD/deploys.jsonl"
 }
 
 switch_to() { # switch_to VERSION: restart the server, and the traffic if it runs, on that release
@@ -75,12 +86,18 @@ build_release() { # build_release REF VERSION: the binaries of REF into releases
   fi
   mkdir -p "$PROD/releases/$2"
   cp "$tmp/src/bin/server" "$tmp/src/bin/traffic" "$PROD/releases/$2/"
+  if [ -f "$tmp/src/ops/release-signals.json" ]; then
+    cp "$tmp/src/ops/release-signals.json" "$PROD/releases/$2/signals.json"
+  fi
   git -C "$REPO" worktree remove --force "$tmp/src"
   rm -rf "$tmp"
 }
 
 deploy() {
-  local ref="${1:-origin/main}" version was
+  local ref="origin/main" wait="" version was arg
+  for arg in "$@"; do
+    case "$arg" in --wait) wait=1 ;; *) ref="$arg" ;; esac
+  done
   if git -C "$REPO" remote get-url origin >/dev/null 2>&1; then git -C "$REPO" fetch --quiet origin; fi
   version="$(git -C "$REPO" rev-parse --short "$ref")"
   [ -x "$PROD/releases/$version/server" ] || build_release "$ref" "$version"
@@ -89,6 +106,12 @@ deploy() {
   if healthy "$version"; then
     record deploy "$version" "$was" ok
     echo "deployed $version (previous: ${was:-none})"
+    if [ -n "$wait" ]; then
+      confirm
+    else
+      nohup "$0" confirm >>"$PROD/logs/confirm.log" 2>&1 &
+      echo "confirming in the background: ops/prod status shows how far it got"
+    fi
     return
   fi
   record deploy "$version" "$was" unhealthy
@@ -99,6 +122,38 @@ deploy() {
     echo "rolled back to $was" >&2
   fi
   exit 1
+}
+
+confirm() { # wait for the running release's window, judge its snapshot, and roll back when it is broken
+  local version previous out code
+  version="$(release_of current)"
+  previous="$(release_of previous)"
+  [ -n "$version" ] || { echo "nothing is deployed yet: ops/prod deploy" >&2; exit 1; }
+  out="$PROD/confirmations/$version-$(date -u +%Y%m%dT%H%M%SZ)"
+  echo $$ >"$PROD/confirm.pid"
+  echo "confirming $version: at least $CONFIRM_MINUTES min and $CONFIRM_EVENTS requests, at most $CONFIRM_CAP min"
+  set +e
+  python3 "$LOOP/snapshot" "$PROD" "$out" --min-minutes "$CONFIRM_MINUTES" --min-events "$CONFIRM_EVENTS" \
+    --cap-minutes "$CONFIRM_CAP" --addr "$ADDR"
+  code=$?
+  if [ "$code" = 0 ]; then
+    "$LOOP/run" "$out" | tee "$out/verdict.txt"
+    code=${PIPESTATUS[0]}
+  fi
+  set -e
+  rm -f "$PROD/confirm.pid"
+  case "$code" in
+    0) record confirm "$version" "$previous" confirmed "$out" ;;
+    3) record confirm "$version" "$previous" inconclusive "$out" ;;
+    4) record confirm "$version" "$previous" superseded ""; return 0 ;;
+    1)
+      record confirm "$version" "$previous" not-confirmed "$out"
+      echo "release $version is not confirmed: rolling back" >&2
+      rollback || true
+      ;;
+    *) record confirm "$version" "$previous" error "" ;;
+  esac
+  return "$code"
 }
 
 rollback() {
@@ -125,6 +180,10 @@ status() {
     echo "server: stopped, current release ${PROD}/current -> $(release_of current)"
   fi
   if alive traffic; then echo "traffic: running, pid $(cat "$PROD/traffic.pid")"; else echo "traffic: stopped"; fi
+  if alive confirm; then echo "confirmation: running — $(tail -n 1 "$PROD/logs/confirm.log" 2>/dev/null)"; fi
+  local last
+  last="$(grep '"action":"confirm"' "$PROD/deploys.jsonl" 2>/dev/null | tail -n 1 || true)"
+  if [ -n "$last" ]; then echo "last confirmation: $last"; fi
 }
 
 traffic() {
@@ -144,11 +203,12 @@ traffic() {
 
 case "${1:-}" in
   deploy) shift; deploy "$@" ;;
+  confirm) confirm ;;
   rollback) rollback ;;
   start) start ;;
   stop) stop ;;
   status) status ;;
   logs) tail -n "${2:-20}" "$PROD/logs/app.jsonl" ;;
   traffic) shift; traffic "$@" ;;
-  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

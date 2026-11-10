@@ -1,0 +1,12 @@
+{"time":"2026-11-10T12:00:00.000+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":1}
+{"time":"2026-11-10T12:00:01.001+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":2}
+{"time":"2026-11-10T12:00:02.002+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":3}
+{"time":"2026-11-10T12:00:03.003+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":1}
+{"time":"2026-11-10T12:00:04.004+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":2}
+{"time":"2026-11-10T12:00:05.005+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":3}
+{"time":"2026-11-10T12:00:06.006+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":1}
+{"time":"2026-11-10T12:00:07.007+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":2}
+{"time":"2026-11-10T12:00:08.008+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":3}
+{"time":"2026-11-10T12:00:09.009+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":1}
+{"time":"2026-11-10T12:00:10.010+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":2}
+{"time":"2026-11-10T12:00:11.011+01:00","level":"INFO","msg":"http request","version":"bbbbbbb","method":"GET","route":"GET /","path":"/","status":200,"duration_ms":3}

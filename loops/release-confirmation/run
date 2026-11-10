@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Judge a release from a snapshot of its window: confirmed, not confirmed, or inconclusive.
+
+    run SNAPSHOT_DIR
+
+The directory holds window.json (the release, the one it replaced, what /healthz answered at the end, the window's
+length and limits, the release's signals), new.jsonl (the log from the deploy on) and old.jsonl (the previous
+release's log over a window of the same length before the deploy). `snapshot` writes them.
+
+Three checks:
+  there     production runs the release: /healthz answered its version at the end of the window
+  happened  each signal of the release appears at least `min` times in its log
+  broke     no error the previous release did not have; the 5xx rate and the p95 latency no worse than the
+            previous release's (a weak baseline, under half the window's requests, falls back to a 1% rate limit)
+
+Exit 0 confirmed, 1 not confirmed, 3 inconclusive (the window is too short to judge), 2 a broken snapshot.
+Standard library only; Python 3.9.
+"""
+import collections
+import json
+import math
+import pathlib
+import re
+import sys
+
+
+def load(path):
+    out = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip():
+            continue
+        try:
+            line = json.loads(raw)
+        except ValueError:  # a crash outside the handlers prints plain text on stderr
+            line = {"level": "ERROR", "msg": "not JSON", "error": raw[:120]}
+        out.append(line)
+    return out
+
+
+def fingerprint(line):
+    if line.get("msg") == "http request":
+        return "http %s %s" % (line.get("route") or line.get("path"), line.get("status"))
+    first = str(line.get("error", "")).splitlines()[0] if line.get("error") else ""
+    return re.sub(r"\d+", "#", "%s: %s" % (line.get("msg"), first)).strip()
+
+
+def p95(values):
+    values = sorted(values)
+    return values[max(0, math.ceil(0.95 * len(values)) - 1)] if values else 0
+
+
+def matches(line, match):
+    return all(str(line.get(k)) == str(v) for k, v in match.items())
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit(__doc__)
+    d = pathlib.Path(argv[1])
+    try:
+        w = json.loads((d / "window.json").read_text(encoding="utf-8"))
+        new, old = load(d / "new.jsonl"), load(d / "old.jsonl")
+        version, previous = w["version"], w.get("previous") or ""
+        min_minutes, min_events, minutes = w["min_minutes"], w["min_events"], w["minutes"]
+    except (OSError, ValueError, KeyError) as e:
+        print("snapshot: broken — %s" % e)
+        return 2
+
+    out, failed, short = [], False, False
+    mine = [l for l in new if l.get("version") in (version, None)]
+    reqs_new = [l for l in mine if l.get("msg") == "http request" and l.get("version") == version]
+    reqs_old = [l for l in old if l.get("msg") == "http request" and l.get("version") == previous]
+
+    if w.get("running") == version:
+        out.append("there: ok — /healthz answers %s" % version)
+    else:
+        failed = True
+        out.append("there: not running — /healthz answers %s, not %s" % (w.get("running") or "nothing", version))
+
+    if minutes < min_minutes or len(reqs_new) < min_events:
+        short = True
+        out.append("window: too short — %.1f min and %d requests; it needs %s min and %d requests"
+                   % (minutes, len(reqs_new), min_minutes, min_events))
+    else:
+        out.append("window: ok — %.1f min, %d requests" % (minutes, len(reqs_new)))
+
+    for s in w.get("signals") or []:
+        n = sum(1 for l in mine if l.get("version") == version and matches(l, s.get("match") or {}))
+        if n >= s.get("min", 1):
+            out.append("happened: ok — %s, %d (min %d)" % (s["name"], n, s.get("min", 1)))
+        elif short:
+            out.append("happened: not yet — %s, %d (min %d), in a window too short to judge"
+                       % (s["name"], n, s.get("min", 1)))
+        else:
+            failed = True
+            out.append("happened: missing — %s, %d (min %d)" % (s["name"], n, s.get("min", 1)))
+
+    known = {fingerprint(l) for l in old if l.get("level") == "ERROR"}
+    fresh = collections.Counter(fingerprint(l) for l in mine if l.get("level") == "ERROR" and fingerprint(l) not in known)
+    for fp, n in fresh.most_common(5):
+        failed = True
+        out.append("broke: new error — %s (%d)" % (fp, n))
+
+    weak = len(reqs_old) < max(1, min_events // 2)
+    rate_new = sum(1 for l in reqs_new if int(l.get("status", 0)) >= 500) / max(len(reqs_new), 1)
+    rate_old = sum(1 for l in reqs_old if int(l.get("status", 0)) >= 500) / max(len(reqs_old), 1)
+    limit = 0.01 if weak else max(rate_old * 1.5, rate_old + 0.005)
+    baseline = "weak baseline, %d requests of %s" % (len(reqs_old), previous or "no previous release") if weak \
+        else "previous %.2f%%" % (100 * rate_old)
+    if reqs_new and rate_new > limit:
+        failed = True
+        out.append("broke: error rate — %.2f%% of requests got a 5xx, over the limit %.2f%% (%s)"
+                   % (100 * rate_new, 100 * limit, baseline))
+    else:
+        out.append("broke: error rate ok — %.2f%% (%s)" % (100 * rate_new, baseline))
+
+    if not weak and reqs_new:
+        lat_new = p95([float(l.get("duration_ms", 0)) for l in reqs_new])
+        lat_old = p95([float(l.get("duration_ms", 0)) for l in reqs_old])
+        if lat_new > max(lat_old * 1.5, lat_old + 50):
+            failed = True
+            out.append("broke: latency — p95 %.0f ms vs %.0f ms before" % (lat_new, lat_old))
+        else:
+            out.append("broke: latency ok — p95 %.0f ms vs %.0f ms before" % (lat_new, lat_old))
+
+    result, code = ("not-confirmed", 1) if failed else ("inconclusive", 3) if short else ("confirmed", 0)
+    print("\n".join(out + ["result: %s %s" % (result, version)]))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

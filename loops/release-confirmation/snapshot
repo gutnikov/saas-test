@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Wait for the window of the running release, then save a snapshot of it for ./run to judge.
+
+    snapshot PROD_HOME OUT_DIR [--min-minutes T] [--min-events N] [--cap-minutes C] [--addr HOST:PORT]
+
+PROD_HOME is the local production of ops/prod: logs/app.jsonl, deploys.jsonl, current -> releases/<version>/. The
+release is the one `current` points at; its window starts at its last ok deploy or rollback in deploys.jsonl, and
+ends when it is at least T minutes long and the release has served at least N requests, or at C minutes.
+
+Writes OUT_DIR/window.json, new.jsonl and old.jsonl. Exit 0 when the snapshot is written, 4 when another release
+replaced this one during the window (nothing to judge), 2 on bad input. Standard library only; Python 3.9.
+"""
+import argparse
+import datetime
+import json
+import os
+import pathlib
+import re
+import sys
+import time
+import urllib.request
+
+UTC = datetime.timezone.utc
+
+
+def ts(text):
+    """A timestamp of slog (variable fractional digits, an offset) or of deploys.jsonl (Z)."""
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$", text or "")
+    if not m:
+        return None
+    base, frac, tz = m.groups()
+    return datetime.datetime.fromisoformat("%s.%s%s" % (base, (frac or "0")[:6].ljust(6, "0"),
+                                                         "+00:00" if tz == "Z" else tz))
+
+
+def release_of(prod, link):
+    path = prod / link
+    return os.path.basename(os.readlink(path)) if path.is_symlink() else ""
+
+
+def last_switch(prod, version):
+    """(when, previous) of the last ok deploy or rollback that made `version` the running release."""
+    found = None
+    for raw in (prod / "deploys.jsonl").read_text(encoding="utf-8").splitlines():
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            continue
+        if e.get("version") == version and e.get("action") in ("deploy", "rollback") and e.get("result") == "ok":
+            found = (ts(e["at"]), e.get("previous") or "")
+    return found
+
+
+def log_lines(prod):
+    """[(time or None, raw)] of the server log, in file order; a line that is not JSON keeps the time before it."""
+    out, last = [], None
+    path = prod / "logs" / "app.jsonl"
+    for raw in path.read_text(encoding="utf-8").splitlines() if path.exists() else []:
+        try:
+            t = ts(json.loads(raw).get("time"))
+        except (ValueError, AttributeError):
+            t = None
+        last = t or last
+        out.append((last, raw))
+    return out
+
+
+def served(lines, start, version):
+    n = 0
+    for t, raw in lines:
+        if t and t >= start and '"msg":"http request"' in raw and '"version":"%s"' % version in raw:
+            n += 1
+    return n
+
+
+def running(addr):
+    try:
+        with urllib.request.urlopen("http://%s/healthz" % addr, timeout=5) as r:
+            return json.loads(r.read().decode()).get("version") or ""
+    except (OSError, ValueError):
+        return ""
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("prod")
+    ap.add_argument("out")
+    ap.add_argument("--min-minutes", type=float, default=20)
+    ap.add_argument("--min-events", type=int, default=50)
+    ap.add_argument("--cap-minutes", type=float, default=60)
+    ap.add_argument("--addr", default="127.0.0.1:18080")
+    ap.add_argument("--poll", type=float, default=5, help="seconds between two looks at the log")
+    a = ap.parse_args()
+    prod, out = pathlib.Path(a.prod), pathlib.Path(a.out)
+
+    version = release_of(prod, "current")
+    switch = last_switch(prod, version) if version else None
+    if not switch:
+        print("snapshot: no ok deploy of the current release %r in deploys.jsonl" % version, file=sys.stderr)
+        return 2
+    start, previous = switch
+    shown = 0.0
+    while True:
+        if release_of(prod, "current") != version:
+            print("snapshot: %s was replaced during its window" % version, file=sys.stderr)
+            return 4
+        lines = log_lines(prod)
+        minutes = (datetime.datetime.now(UTC) - start).total_seconds() / 60
+        n = served(lines, start, version)
+        if (minutes >= a.min_minutes and n >= a.min_events) or minutes >= a.cap_minutes:
+            break
+        if minutes - shown >= 0.5:
+            print("window of %s: %.1f of %s min, %d of %d requests" % (version, minutes, a.min_minutes, n,
+                                                                       a.min_events), file=sys.stderr, flush=True)
+            shown = minutes
+        time.sleep(a.poll)
+
+    end = datetime.datetime.now(UTC)
+    length = end - start
+    new = [raw for t, raw in lines if t and t >= start and '"version":"%s"' % previous not in raw] \
+        if previous else [raw for t, raw in lines if t and t >= start]
+    old = [raw for t, raw in lines if t and start - length <= t < start and '"version":"%s"' % previous in raw] \
+        if previous else []
+    signals = [{"name": "serves requests", "match": {"msg": "http request"}, "min": a.min_events}]
+    extra = prod / "releases" / version / "signals.json"
+    if extra.exists():
+        signals += json.loads(extra.read_text(encoding="utf-8"))
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "window.json").write_text(json.dumps({
+        "version": version, "previous": previous, "running": running(a.addr),
+        "deployed_at": start.isoformat(), "ended_at": end.isoformat(),
+        "minutes": round(length.total_seconds() / 60, 2), "min_minutes": a.min_minutes,
+        "min_events": a.min_events, "cap_minutes": a.cap_minutes, "signals": signals,
+    }, indent=1) + "\n", encoding="utf-8")
+    (out / "new.jsonl").write_text("".join(r + "\n" for r in new), encoding="utf-8")
+    (out / "old.jsonl").write_text("".join(r + "\n" for r in old), encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
