@@ -20,7 +20,7 @@ stack:
 
 # Where a change goes after the agent writes it, besides edit, local, commit, task and continuous, which are always
 # there. Values from a loop's trigger: ci, scheduled, preview, staging, production.
-stages: [ci, production]
+stages: [ci, scheduled, production]
 
 # What the agent can use from its own session, each checked with one real call.
 # Keys: ci, logs, errors, metrics, traces, browser, deploy. Value: what and how, e.g. "GitLab CI via glab".
@@ -45,6 +45,11 @@ not_here:
 # Where a change ends now: the last stage it reaches, and what confirms it there, e.g.
 # "production, by the deploy job; nothing confirms it after the deploy".
 ends_at: "production, deployed by hand with ops/prod deploy; only /healthz answering with the new version confirms it"
+
+# Where the project's own systems record the exits of its super-loops: files of JSON lines, each with at, action
+# (deploy, confirm, rollback), version, result and evidence. loops.py stats reads them; what no system records goes
+# into loops/trace.jsonl through loops.py trace.
+trace: ["~/.saas-test/prod/deploys.jsonl"]
 
 # The checks the project already runs: what, where it runs, and its places, e.g.
 #   - "golangci-lint, CI job lint: delivery/work remediation/work maintenance/work"

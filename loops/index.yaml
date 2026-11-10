@@ -6,4 +6,5 @@ loops:
     type: release-confirmation
     status: active
     trigger: [production]
+    places: [delivery/confirmation, remediation/confirmation, maintenance/confirmation]
     validation: cases

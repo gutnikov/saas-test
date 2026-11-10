@@ -1,0 +1,1 @@
+{"at": "2026-11-10T12:02:10", "kind": "escape", "place": "delivery/work", "item": "2432236", "note": "/api/version panicked on one request in four and the unit tests stayed green: no test calls /api/version. A handler test in the work phase would have caught it; caught instead at delivery/confirmation (the loop's first real trigger, a scratch release)."}
