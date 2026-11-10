@@ -47,6 +47,9 @@ def main(argv):
     if now.get("(build)") == "fail":
         failed = True
         print("tests: the acceptance tests do not build")
+    elif now.get("(package)") != "pass":
+        failed = True
+        print("tests: the acceptance package did not pass as a whole (%s)" % now.get("(package)", "no result"))
 
     by_example = {}
     for test, example in tests.items():

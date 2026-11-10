@@ -13,6 +13,7 @@ PyYAML and Go.
 """
 import hashlib
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -56,6 +57,8 @@ def results(repo):
         name = e.get("Test") or ""
         if name and "/" not in name and e.get("Action") in ("pass", "fail", "skip"):
             out[name] = e["Action"]
+        elif not name and e.get("Action") in ("pass", "fail", "skip"):
+            out["(package)"] = e["Action"]  # the binary's own verdict: forged test lines cannot make it pass
     if not out and run.returncode:
         out["(build)"] = "fail"
         sys.stderr.write(run.stdout[-2000:] + run.stderr[-2000:])
@@ -63,9 +66,12 @@ def results(repo):
 
 
 def examples(repo):
-    """{example id: [requirement ids]} of every e2e-ready example of the spec, from em.py export."""
-    run = subprocess.run([str(repo / "ops" / "spec"), "em", "export", "specs/model/"], cwd=repo, capture_output=True,
-                         text=True, check=True)
+    """{example id: [requirement ids]} of every e2e-ready example of the spec, from em.py export. With SPEC_PLUGIN set
+    (in CI), the plugin runs directly, so no script of the repository under test runs here."""
+    plugin = os.environ.get("SPEC_PLUGIN")
+    cmd = ([sys.executable, str(pathlib.Path(plugin) / "skills" / "event-model" / "scripts" / "em.py")] if plugin
+           else [str(repo / "ops" / "spec"), "em"]) + ["export", "specs/model/"]
+    run = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, check=True)
     doc = json.loads(run.stdout)
     return {"%s/%s" % (e["slice"], e["name"]): sorted(set(e.get("reqs") or []))
             for e in doc["examples"] if e.get("e2e_ready")}
