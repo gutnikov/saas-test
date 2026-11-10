@@ -1,0 +1,15 @@
+# The spec layers this project keeps. Each one exists for a named risk, or as the spine.
+
+layers:
+  - id: spine
+    type: event-model
+    path: specs/model/
+    check: ops/spec em check --strict specs/model/
+    status: validated
+    why: "the spine: every behaviour as an example the acceptance tests are derived from"
+  - id: glossary
+    type: glossary
+    path: specs/glossary.yaml
+    check: ops/spec specs check
+    status: validated
+    why: "one name per thing: the tests, the code and the screens reuse the names"

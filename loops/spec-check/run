@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Contract: $1 is the directory to check: the project, or a case that holds a copy of specs/. Exit 0 = passes.
+# Runs the spec plugin's own checks, through ops/spec: specs.py check (requirements, layers, the trace to the spec)
+# and em.py check --strict (the event model, with every test obligation pinned down by an example).
+set -uo pipefail
+dir="$(cd "$1" && pwd)"
+spec="$(cd "$(dirname "$0")/../.." && pwd)/ops/spec"
+code=0
+if ! out="$("$spec" specs check --root "$dir" 2>&1)"; then
+  printf '%s\n' "$out" | sed -n '/^ERRORS/,/^WARNINGS/p' | grep '^   ' | sed 's/^   /specs: /'
+  code=1
+fi
+if ! out="$("$spec" em check --strict "$dir/specs/model/" 2>&1)"; then
+  printf '%s\n' "$out" | sed -n '/^ERRORS/,/^WARNINGS/p' | grep '^   ' | sed 's/^   /model: /'
+  printf '%s\n' "$out" | sed -n '/not pinned down yet:/,/^$/p' | grep '^     ' | sed 's/^ *\([a-z ]*[a-z]\) \{1,\}/model: no example pins down the \1 /'
+  code=1
+fi
+exit "$code"

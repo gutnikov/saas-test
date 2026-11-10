@@ -1,0 +1,9 @@
+{
+ "TestS01ANameOf60CharactersIsAccepted": "fail",
+ "TestS01ANameOf61CharactersIsRefused": "fail",
+ "TestS01ANewNameCreatesATeam": "fail",
+ "TestS01ATakenNameIsRefusedWhateverItsCase": "fail",
+ "TestS01AnEmptyNameIsRefused": "fail",
+ "TestS01TheNewestTeamIsListedFirst": "fail",
+ "TestS01TheSpacesAroundANameAreTrimmed": "fail"
+}

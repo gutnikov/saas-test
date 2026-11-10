@@ -1,0 +1,88 @@
+# saas-test — Event Model. Format: the event-model skill's format.md. Check: ops/spec em check specs/model/
+
+system: saas-test
+actors: [Visitor]
+externals: {}
+clock: false
+domains: {}
+rules: {}
+
+screens:
+  TeamsPage: {route: /, pom: teamsPage}
+
+states:
+  noTeams:
+    given: []
+    note: "no team exists"
+  teamAcme:
+    extends: noTeams
+    given: [TeamCreated]
+    note: "one team, named Acme"
+
+slices:
+  - id: S01
+    name: Create team
+    type: command
+    actor: Visitor
+    screen: TeamsPage
+    reqs: [TEAMS-1#1, TEAMS-1#3, TEAMS-1#4]
+    command:
+      name: CreateTeam
+      fields: {name: input}
+    errors: [TeamNameRequired, TeamNameTooLong, TeamNameTaken]
+    events:
+      TeamCreated:
+        stream: Team
+        fields: {teamId: system, name: cmd, createdAt: system}
+    specs:
+      - name: a new name creates a team
+        reqs: [TEAMS-1#2]
+        given: noTeams
+        when: {name: Acme}
+        then:
+          events: [TeamCreated]
+          see:
+            - {screen: TeamsPage, field: Teams.name, is: [Acme]}
+      - name: the newest team is listed first
+        reqs: [TEAMS-1#2]
+        given: teamAcme
+        when: {name: Beta}
+        then:
+          events: [TeamCreated]
+          see:
+            - {screen: TeamsPage, field: Teams.name, is: [Beta, Acme]}
+      - name: the spaces around a name are trimmed
+        given: noTeams
+        when: {name: "  Acme  "}
+        then:
+          events: [TeamCreated]
+          see:
+            - {screen: TeamsPage, field: Teams.name, is: [Acme]}
+      - name: a name of 60 characters is accepted
+        given: noTeams
+        when: {name: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+        then:
+          events: [TeamCreated]
+          see:
+            - {screen: TeamsPage, field: Teams.name, is: ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]}
+      - name: an empty name is refused
+        given: noTeams
+        when: {name: "   "}
+        then: {error: TeamNameRequired}
+      - name: a name of 61 characters is refused
+        given: noTeams
+        when: {name: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+        then: {error: TeamNameTooLong}
+      - name: a taken name is refused whatever its case
+        given: teamAcme
+        when: {name: ACME}
+        then: {error: TeamNameTaken}
+
+  - id: V01
+    name: Teams
+    type: view
+    reqs: [TEAMS-1#2]
+    read_model:
+      name: Teams
+      fields: {name: [TeamCreated.name]}
+    screens: [TeamsPage]

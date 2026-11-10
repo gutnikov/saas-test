@@ -1,0 +1,21 @@
+# The facts spec layers are chosen by. How to fill it: the spec skill's profile.md.
+
+product:
+  kind: [web, api]
+  summary: "team subscriptions: a team picks a plan, tries it, and adds people to its seats"
+
+sources:
+  trackers: []      # requirements come as text from the user in the chat; the repository's GitHub issues are empty
+  docs: []
+  running_app: "http://127.0.0.1:18080, the local production (ops/prod)"
+
+people:
+  approver: "the user, the owner of the repository"
+  readers: [developers]
+
+tests:
+  writer: "a test-writer agent of the session, separate from the agent that implements; it reads em.py export"
+  e2e: "none yet: the acceptance tests drive the HTTP API (Go, net/http/httptest)"
+  seeding: "the store package on a temporary SQLite database"
+
+risks: []           # money (plans, seats, trials) comes with the first plan feature, and decision tables with it

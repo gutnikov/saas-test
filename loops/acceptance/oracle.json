@@ -1,0 +1,10 @@
+{
+ "acceptance/app_test.go": "8715374b6c821639fe2fb6b7dc1eb11306cf4d6bbc507bfe987f8d1408e5711a",
+ "acceptance/teams_test.go": "6d78e978eff4f9717e1a1f0149a835b7c962383170036ce2c547414cf256c1d3",
+ "specs/glossary.yaml": "e5ddbd037079a53ecaf0eed1cc058694eeefa0024c69af469876604e3599bf63",
+ "specs/layers.yaml": "3b63bb4201bafa84d2c476a479cb60b56104928b0443739a4281deb0bf9fe64b",
+ "specs/model/teams.em.yaml": "2fbe31298cc9a961b23b16996e3dc70683ef59c960b637c7805cce07e2fff00f",
+ "specs/policy.yaml": "aeb6a2243869305d3fc4a07603349f2b61ee85a54d22144687337e5c197f6269",
+ "specs/profile.yaml": "4f9df11f1129886b8ef147cd9c79a336ed8a767a33c1a185d8b6c9436cac4aea",
+ "specs/requirements/TEAMS-1.yaml": "a1ab6409f53becbaadbe726526676ab57f0094efefea47dfc7679f603124d65c"
+}

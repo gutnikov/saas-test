@@ -1,0 +1,7 @@
+terms:
+  - term: team
+    meaning: "a group of people who will share one subscription"
+    not: [group, organization, workspace]
+  - term: team name
+    meaning: "the name a person gives a team when creating it"
+    not: [title, label]

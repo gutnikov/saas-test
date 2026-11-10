@@ -1,0 +1,26 @@
+# The project's spec policy. It changes only with the user's approval (reason R5).
+
+autonomy:
+  edit_specs: true           # write and change files under specs/
+  approve: false             # mark a requirement file approved: a person does it (R4)
+  read_trackers: true        # read tickets by link; never write to a tracker
+  commit: true               # commit changes under specs/
+  push: false
+
+# Always a question to a person, never a guess, whatever the sources hint at.
+never_invent:
+  - prices, credits, quotas and limits
+  - who may do what (roles and permissions)
+  - legal, compliance and consent texts
+  - the wording of errors and of anything about money
+  - deadlines, timeouts and retry counts
+
+ask:
+  who: "the user"            # the person who answers questions about requirements; see profile.people.approver
+  batch: true                # all open questions of one requirement file in one message
+  reasons:
+    R1: "a fact the sources do not give"
+    R2: "two sources contradict each other"
+    R3: "a choice between options that behave differently"
+    R4: "approval of a requirement file and its spec"
+    R5: "a change to this policy or to the chosen layers"
