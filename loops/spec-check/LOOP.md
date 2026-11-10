@@ -57,5 +57,5 @@ specs: specs/model/teams.em.yaml: slice S01 refers to unknown requirement TEAMS-
 ## Wiring
 
 - `.github/workflows/ci.yml`, job `acceptance`, step `spec-check`: on every push to `main` and every pull request,
-  with the spec plugin checked out at the pinned commit (`SPEC_PLUGIN`).
+  with the spec plugin checked out at the pinned commit (`SPEC_PLUGIN`). It runs as the base branch has it.
 - Locally: `loops/spec-check/run .`, with the plugin as the sibling checkout `../my-claude-plugins`.

@@ -20,7 +20,7 @@ import sys
 
 import yaml
 
-HERE = pathlib.Path(__file__).resolve().parent
+HERE = pathlib.Path(__file__).resolve().parent  # this code; the evidence lives in REPO/loops/acceptance
 TAG = re.compile(r"^// example: (.+?)\s*\nfunc (Test\w+)\(", re.M)
 
 
@@ -88,10 +88,11 @@ def main(argv):
     if len(argv) != 3:
         sys.exit(__doc__)
     repo = pathlib.Path(argv[1]).resolve()
+    evidence = repo / "loops" / "acceptance"
     if argv[2] == "--record":
         run = results(repo)
-        write(HERE / "red-before.json", run)
-        write(HERE / "oracle.json", fingerprints(repo))
+        write(evidence / "red-before.json", run)
+        write(evidence / "oracle.json", fingerprints(repo))
         print("recorded the run before the work (%d tests: %s) and the oracle (%d files)"
               % (len(run), ", ".join("%s %d" % (k, list(run.values()).count(k)) for k in sorted(set(run.values()))),
                  len(fingerprints(repo))))
@@ -104,7 +105,7 @@ def main(argv):
     write(out / "results.json", results(repo))
     write(out / "current.json", fingerprints(repo))
     for name in ("red-before.json", "oracle.json"):
-        src = HERE / name
+        src = evidence / name
         write(out / name, json.loads(src.read_text(encoding="utf-8")) if src.exists() else {})
     return 0
 

@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+# The gates below run as the base branch has them (a worktree at .gate), so the pull request they judge cannot weaken
+# them. A gate that a pull request brings for the first time runs from that pull request, with a warning to review it.
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -24,13 +27,16 @@ jobs:
       - run: make ci
 
   # The gate of the delivery super-loop: the spec stays whole, and every approved requirement went from red to green
-  # with the spec and the acceptance tests as they were approved. Runs here, out of the reach of the agent at work.
+  # with the spec and the acceptance tests as they were approved.
   acceptance:
     runs-on: ubuntu-latest
     env:
       SPEC_PLUGIN: ${{ github.workspace }}/.tools/my-claude-plugins/plugins/spec
+      BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/checkout@v7
         with:
           repository: gutnikov/my-claude-plugins
@@ -43,10 +49,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyyaml==6.0.3
+      - name: take the gates from the base
+        run: git worktree add --detach .gate "$BASE"
       - name: spec-check
-        run: loops/spec-check/run .
+        run: |
+          G=.gate; [ -x .gate/loops/spec-check/run ] || { echo "::warning::spec-check comes from this pull request: review loops/ by hand"; G=.; }
+          "$G/loops/spec-check/run" .
       - name: acceptance gate
-        run: loops/acceptance/collect . "$RUNNER_TEMP/acceptance" && loops/acceptance/run "$RUNNER_TEMP/acceptance"
+        run: |
+          G=.gate; [ -x .gate/loops/acceptance/run ] || { echo "::warning::the acceptance gate comes from this pull request: review loops/ by hand"; G=.; }
+          "$G/loops/acceptance/collect" . "$RUNNER_TEMP/acceptance" && "$G/loops/acceptance/run" "$RUNNER_TEMP/acceptance"
 
   # The gate of the maintenance super-loop, for a pull request from a maint/ branch: no test, spec or expected value
   # changed, and the measure improved (loops/behaviour-invariance).
@@ -59,4 +71,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - run: loops/behaviour-invariance/collect . "$BASE" "$RUNNER_TEMP/invariance" && loops/behaviour-invariance/run "$RUNNER_TEMP/invariance"
+      - name: take the gate from the base
+        run: git worktree add --detach .gate "$BASE"
+      - name: behaviour invariance
+        run: |
+          G=.gate; [ -x .gate/loops/behaviour-invariance/run ] || { echo "::warning::behaviour-invariance comes from this pull request: review loops/ by hand"; G=.; }
+          "$G/loops/behaviour-invariance/collect" . "$BASE" "$RUNNER_TEMP/invariance" && "$G/loops/behaviour-invariance/run" "$RUNNER_TEMP/invariance"

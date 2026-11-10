@@ -1,17 +1,35 @@
 {
  "name": "days of support left of the runtimes",
  "before": {
-  "value": 902,
+  "runtimes": {
+   "go": {
+    "cycle": "1.26",
+    "days": null
+   },
+   "node": {
+    "cycle": "26",
+    "days": 902
+   }
+  },
   "detail": [
-   "node 26: 902 days",
-   "go 1.26: no end of life announced"
+   "go 1.26: no end of life announced",
+   "node 26: 902 days"
   ]
  },
  "after": {
-  "value": 902,
+  "runtimes": {
+   "go": {
+    "cycle": "1.26",
+    "days": null
+   },
+   "node": {
+    "cycle": "26",
+    "days": 902
+   }
+  },
   "detail": [
-   "node 26: 902 days",
-   "go 1.26: no end of life announced"
+   "go 1.26: no end of life announced",
+   "node 26: 902 days"
   ]
  }
 }

@@ -54,11 +54,17 @@ measure improved — days of support left of the runtimes: node 20: -194 days; g
 | must-fire/the-spec-changed | fires | The spec changed |
 | must-fire/a-web-test-changed | fires | A frontend test changed |
 | must-fire/measure-not-improved | fires | The runtimes' support stayed where it was |
+| must-fire/a-test-with-a-space-in-its-name | fires | A changed test whose name has a space |
+| must-fire/a-version-unknown-after | fires | `.nvmrc` names a version endoflife.date does not know |
+| must-fire/a-runtime-dropped | fires | A runtime is gone after the change |
 | must-pass/runtime-moved | passes | Only the toolchain files changed, and Node moved from 20 to 26 |
 
-The measure is the runtimes' support only: a maintenance of another kind (a refactoring, a dependency bump) needs its
+The measure fails closed: the runtimes before and after must be the same, every one known to endoflife.date, and only
+an explicit "no end of life announced" counts as unlimited. File names come NUL-separated and unquoted. The measure
+is the runtimes' support only: a maintenance of another kind (a refactoring, a dependency bump) needs its
 own measure here first.
 
 ## Wiring
 
 - `.github/workflows/ci.yml`, job `maintenance`: on a pull request whose branch starts with `maint/`, against its base.
+  The gate runs as the base branch has it (a worktree at `.gate`), so the pull request cannot weaken it.
