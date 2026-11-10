@@ -1,0 +1,19 @@
+[
+ {
+  "name": "TEAMS-1#1: a team is created",
+  "req": "TEAMS-1#1",
+  "match": {
+   "event": "TeamCreated"
+  },
+  "min": 5
+ },
+ {
+  "name": "TEAMS-1#2: the list of teams is shown",
+  "req": "TEAMS-1#2",
+  "match": {
+   "route": "GET /api/teams",
+   "status": 200
+  },
+  "min": 5
+ }
+]

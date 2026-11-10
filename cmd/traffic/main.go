@@ -3,20 +3,37 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
 
-// scenarios are the requests a synthetic user makes. A feature that ships adds its own.
-var scenarios = []string{
-	"/",
-	"/api/version",
-	"/healthz",
+// A scenario is one thing a synthetic user does. A feature that ships adds its own, so that its production signal
+// has traffic to appear in.
+type scenario func(c *http.Client, base string) (*http.Response, error)
+
+func get(path string) scenario {
+	return func(c *http.Client, base string) (*http.Response, error) { return c.Get(base + path) }
+}
+
+// createTeam is TEAMS-1#1: a visitor creates a team under a fresh name.
+func createTeam(c *http.Client, base string) (*http.Response, error) {
+	body := fmt.Sprintf(`{"name": "team %d"}`, rand.Int64())
+	return c.Post(base+"/api/teams", "application/json", strings.NewReader(body))
+}
+
+// scenarios, as often as they come: the list of teams (TEAMS-1#2) and new teams (TEAMS-1#1) more than the rest.
+var scenarios = []scenario{
+	get("/"), get("/api/version"), get("/healthz"),
+	get("/api/teams"), get("/api/teams"),
+	createTeam, createTeam,
 }
 
 func main() {
@@ -29,11 +46,11 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	for {
-		path := scenarios[rand.IntN(len(scenarios))]
-		res, err := client.Get(*base + path)
+		res, err := scenarios[rand.IntN(len(scenarios))](client, *base)
 		if err != nil {
-			log.Printf("GET %s: %v", path, err)
+			log.Print(err)
 		} else {
+			_, _ = io.Copy(io.Discard, res.Body)
 			_ = res.Body.Close()
 		}
 		select {
