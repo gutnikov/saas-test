@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The tools of the spec plugin (github.com/gutnikov/my-claude-plugins, plugins/spec) on this repository:
+#
+#   ops/spec specs <args>   specs.py: check, trace, delta, signals …
+#   ops/spec em <args>      em.py: check, export
+#
+# SPEC_PLUGIN points at the plugin; without it, the plugin is the sibling checkout ../my-claude-plugins.
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+PLUGIN="${SPEC_PLUGIN:-$REPO/../my-claude-plugins/plugins/spec}"
+[ -d "$PLUGIN" ] || { echo "no spec plugin at $PLUGIN: set SPEC_PLUGIN" >&2; exit 2; }
+cd "$REPO"
+case "${1:-}" in
+  specs) shift; exec python3 "$PLUGIN/skills/spec/scripts/specs.py" "$@" ;;
+  em) shift; exec python3 "$PLUGIN/skills/event-model/scripts/em.py" "$@" ;;
+  *) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
