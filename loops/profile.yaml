@@ -1,10 +1,10 @@
-# The project's profile: what the harness engineer found in the project and what the user answered at setup.
+# The project's profile: what /agentify:init found in the project and what the user confirmed.
 #
-# The map of the super-loops and the loops are chosen from it (the plugin's profile.md, "From the profile to the map
+# The map of the super-loops and the loops are chosen from it (agentify's parts/harness/profile.md, "From the profile to the map
 # and the loops"). Keep it current: when the project changes, update this file from what you see instead of asking
 # again.
 #
-# A place is <super-loop>/<phase>, such as delivery/confirmation (the plugin's super-loops/README.md).
+# A place is <super-loop>/<phase>, such as delivery/confirmation (agentify's parts/harness/super-loops/README.md).
 
 version: 1
 
@@ -29,6 +29,9 @@ tools:
   ci: "GitHub Actions via gh; gh run list answers"
   logs: "the production log ~/.saas-test/prod/logs/app.jsonl: JSON lines, each with the version; ops/prod logs N"
   deploy: "ops/prod deploy, rollback and status, run from this session"
+  browser: "Chrome DevTools MCP, named by the user on 2026-11-10; not called yet: call it once before a loop relies on it"
+  errors: "from the production log, no error tracker: lines with level ERROR or status >= 500, each with the version; ops/prod logs N"
+  metrics: "from the production log, no metrics backend: status and duration_ms per route and version; ops/prod logs N"
 
 # The super-loops the project has work for, each with where its work comes from now, e.g.
 #   delivery: "Jira tickets of the PAY project"
@@ -44,20 +47,26 @@ not_here:
 
 # Where a change ends now: the last stage it reaches, and what confirms it there, e.g.
 # "production, by the deploy job; nothing confirms it after the deploy".
-ends_at: "production, deployed by hand with ops/prod deploy; only /healthz answering with the new version confirms it"
+ends_at: "production, deployed by hand with ops/prod deploy; release-confirmation judges every release over a 20-minute window and rolls back a broken one"
 
 # Where the project's own systems record the exits of its super-loops: files of JSON lines, each with at, action
 # (deploy, confirm, rollback), version, result and evidence. loops.py stats reads them; what no system records goes
 # into loops/trace.jsonl through loops.py trace.
 trace: ["~/.saas-test/prod/deploys.jsonl"]
 
-# The checks the project already runs: what, where it runs, and its places, e.g.
-#   - "golangci-lint, CI job lint: delivery/work remediation/work maintenance/work"
-# Reused, not rebuilt.
+# The checks the project already runs, each as "<name>: <places> — <where it runs, what it does>", e.g.
+#   - "golangci-lint: delivery/work remediation/work maintenance/work — CI job lint, on every merge request"
+# The name before the colon labels the check on the map. Reused, not rebuilt.
 existing_checks:
   - "make ci: delivery/work remediation/work maintenance/work — by hand; gofmt, go vet, go test, the frontend built with tsc"
-  - "CI job ci: delivery/work remediation/work maintenance/work — make ci on every push to main and every pull request"
+  - "CI job ci: delivery/work remediation/work maintenance/work — make ci on every push to main and every pull request; advisory: main is not protected, so a red run does not stop a merge"
   - "ops/prod /healthz: delivery/release remediation/release maintenance/release — the deploy waits for /healthz to answer with the new version, and switches back if it does not"
 
+# The failures the loops must catch first: breaks-build, not-really-working, conventions, escapes, aging, security,
+# performance, compatibility, or the user's own words. Each as "<pain>: <the place that should catch it> — <evidence>",
+# e.g.
+#   - "escapes: delivery/confirmation — 2 of the last 10 releases rolled back"
 pains:
-  - "escapes: delivery/confirmation — delivery must end on a fact confirmed in production, the release running and the log clean for a window such as 20 minutes; today nothing checks a release after /healthz (named by the user on 2026-11-10)"
+  - "escapes: delivery/confirmation — named by the user on 2026-11-10: delivery ends on a fact confirmed in production; release-confirmation has judged 5 releases since, 1 not confirmed (2432236) and rolled back"
+  - "not-really-working: delivery/work — 2432236: /api/version panicked on one request in four while the unit tests stayed green; caught only at delivery/confirmation (loops/trace.jsonl)"
+  - "aging: maintenance/entry — Node 20 was past its end of life for six months before anyone noticed (loops/trace.jsonl); runtime-eol watches the runtimes now, its first scheduled run is on 2026-11-16"
