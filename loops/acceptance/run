@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""The acceptance gate: judge a snapshot from `collect`.
+
+    run SNAPSHOT_DIR
+
+For every approved requirement, one line `<requirement>: <status>`:
+  no test                   an example of it has no acceptance test, or it has no example at all
+  green before the work     one of its tests passed before the work, so it tests nothing
+  red                       one of its tests fails now
+  green                     every test of it failed before the work and passes now
+Before them, `oracle: changed without approval — <files>` when the spec or a test differs from what was recorded
+when the tests were written red.
+
+Exit 0 when the oracle is unchanged and every approved requirement is green; 1 otherwise; 2 for a broken snapshot.
+Standard library only.
+"""
+import json
+import pathlib
+import sys
+
+
+def load(d, name):
+    return json.loads((d / name).read_text(encoding="utf-8"))
+
+
+def main(argv):
+    if len(argv) != 2:
+        sys.exit(__doc__)
+    d = pathlib.Path(argv[1])
+    try:
+        reqs, examples, tests = load(d, "requirements.json"), load(d, "examples.json"), load(d, "tests.json")
+        now, before = load(d, "results.json"), load(d, "red-before.json")
+        oracle, current = load(d, "oracle.json"), load(d, "current.json")
+    except (OSError, ValueError) as e:
+        print("snapshot: broken — %s" % e)
+        return 2
+
+    failed = False
+    if not oracle or not before:
+        failed = True
+        print("oracle: no record of the tests from before the work: run `collect REPO --record` when they are red")
+    else:
+        changed = sorted(f for f in set(oracle) | set(current) if oracle.get(f) != current.get(f))
+        if changed:
+            failed = True
+            print("oracle: changed without approval — %s" % ", ".join(changed))
+    if now.get("(build)") == "fail":
+        failed = True
+        print("tests: the acceptance tests do not build")
+
+    by_example = {}
+    for test, example in tests.items():
+        by_example.setdefault(example, []).append(test)
+    unknown = sorted(e for e in by_example if e not in examples)
+    for e in unknown:
+        failed = True
+        print("tests: %s is tagged with %s, which the spec does not have" % (", ".join(by_example[e]), e))
+
+    for rid in sorted(r for r, v in reqs.items() if v.get("status") == "approved"):
+        mine = sorted(e for e, rs in examples.items() if rid in rs)
+        untested = [e for e in mine if e not in by_example]
+        ts = sorted(t for e in mine for t in by_example.get(e, []))
+        if not mine or untested:
+            status = "no test" + (" — %s" % ", ".join(untested) if untested else " — no example in the spec")
+        elif any(before.get(t) == "pass" for t in ts):
+            status = "green before the work — %s" % ", ".join(t for t in ts if before.get(t) == "pass")
+        elif any(now.get(t) != "pass" for t in ts):
+            status = "red — %s" % ", ".join(t for t in ts if now.get(t) != "pass")
+        else:
+            status = "green (%d tests)" % len(ts)
+        if not status.startswith("green ("):
+            failed = True
+        print("%s: %s" % (rid, status))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

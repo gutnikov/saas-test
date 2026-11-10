@@ -4,13 +4,18 @@ package httpapi
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/gutnikov/saas-test/internal/store"
+	"github.com/gutnikov/saas-test/internal/teams"
 )
 
 // Config is what the handler needs from the rest of the service.
@@ -28,6 +33,8 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": cfg.Version})
 	})
+	mux.HandleFunc("POST /api/teams", createTeam(cfg))
+	mux.HandleFunc("GET /api/teams", listTeams(cfg))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
@@ -44,6 +51,64 @@ func health(cfg Config) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": cfg.Version})
+	}
+}
+
+type teamJSON struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// createTeam is the command CreateTeam (spec TEAMS-1, slice S01). It answers 201 with the team, or the refusal as
+// {"error", "message"}: 400 for a name that is empty or too long, 409 for a taken one. A created team is logged as
+// the domain event TeamCreated before the answer: that line is the production signal of TEAMS-1#1.
+func createTeam(cfg Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BadRequest",
+				"message": "the body must be a JSON object with a name"})
+			return
+		}
+		name, err := teams.Name(body.Name)
+		if err == nil {
+			var t teams.Team
+			if t, err = store.CreateTeam(r.Context(), cfg.DB, name); err == nil {
+				cfg.Logger.Info("domain event", "event", "TeamCreated", "teamId", t.ID, "name", t.Name)
+				writeJSON(w, http.StatusCreated, teamJSON{ID: t.ID, Name: t.Name})
+				return
+			}
+		}
+		var refused *teams.Error
+		if errors.As(err, &refused) {
+			status := http.StatusBadRequest
+			if refused == teams.ErrNameTaken {
+				status = http.StatusConflict
+			}
+			writeJSON(w, status, map[string]string{"error": refused.Code, "message": refused.Message})
+			return
+		}
+		cfg.Logger.Error("create team", "error", err.Error())
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+}
+
+// listTeams is the read model Teams (slice V01): every team, newest first.
+func listTeams(cfg Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := store.ListTeams(r.Context(), cfg.DB)
+		if err != nil {
+			cfg.Logger.Error("list teams", "error", err.Error())
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		out := make([]teamJSON, 0, len(list))
+		for _, t := range list {
+			out = append(out, teamJSON{ID: t.ID, Name: t.Name})
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

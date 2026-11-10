@@ -8,7 +8,7 @@ import (
 )
 
 func TestMigrateAppliesEachMigrationOnce(t *testing.T) {
-	db := openTemp(t)
+	db := openEmpty(t)
 	files := fstest.MapFS{
 		"migrations/0001_a.sql": {Data: []byte(`CREATE TABLE a (id INTEGER PRIMARY KEY);`)},
 		"migrations/0002_b.sql": {Data: []byte(`CREATE TABLE b (id INTEGER PRIMARY KEY); INSERT INTO a (id) VALUES (1);`)},
@@ -27,7 +27,7 @@ func TestMigrateAppliesEachMigrationOnce(t *testing.T) {
 }
 
 func TestMigrateRollsBackAFailedMigration(t *testing.T) {
-	db := openTemp(t)
+	db := openEmpty(t)
 	files := fstest.MapFS{
 		"migrations/0001_bad.sql": {Data: []byte(`CREATE TABLE c (id INTEGER PRIMARY KEY); SELECT * FROM missing;`)},
 	}
@@ -40,6 +40,17 @@ func TestMigrateRollsBackAFailedMigration(t *testing.T) {
 	if got := count(t, db, `SELECT COUNT(*) FROM schema_migrations`); got != 0 {
 		t.Error("the failed migration is recorded as applied")
 	}
+}
+
+// openEmpty is a database without the app's own migrations, for the tests of the migration mechanism itself.
+func openEmpty(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "empty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
 }
 
 func openTemp(t *testing.T) *sql.DB {

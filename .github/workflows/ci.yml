@@ -22,3 +22,28 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: make ci
+
+  # The gate of the delivery super-loop: the spec stays whole, and every approved requirement went from red to green
+  # with the spec and the acceptance tests as they were approved. Runs here, out of the reach of the agent at work.
+  acceptance:
+    runs-on: ubuntu-latest
+    env:
+      SPEC_PLUGIN: ${{ github.workspace }}/.tools/my-claude-plugins/plugins/spec
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: gutnikov/my-claude-plugins
+          ref: 0e3c71d320188d97a5d05b325e92a2a9a645e3c0 # spec 0.3.1
+          path: .tools/my-claude-plugins
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml==6.0.3
+      - name: spec-check
+        run: loops/spec-check/run .
+      - name: acceptance gate
+        run: loops/acceptance/collect . "$RUNNER_TEMP/acceptance" && loops/acceptance/run "$RUNNER_TEMP/acceptance"

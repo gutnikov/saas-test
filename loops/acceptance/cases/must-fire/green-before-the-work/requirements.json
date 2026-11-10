@@ -1,0 +1,17 @@
+{
+ "R-1#1": {
+  "kind": "functional",
+  "status": "approved",
+  "text": "x"
+ },
+ "R-1#2": {
+  "kind": "constraint",
+  "status": "approved",
+  "text": "y"
+ },
+ "R-2#1": {
+  "kind": "functional",
+  "status": "draft",
+  "text": "z"
+ }
+}

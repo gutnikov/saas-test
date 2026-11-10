@@ -1,0 +1,49 @@
+# Requirements from one source: a ticket or a text. Ids are stable: spec elements refer to them in `reqs:`.
+
+key: TEAMS-1
+source: "text from the user in the chat, 2026-11-10: the first feature of saas-test, creating a team"
+title: "Create a team"
+fetched: 2026-11-10
+status: approved               # draft | questions | approved | superseded
+approved_by: "the user, in the chat"
+approved_at: "2026-11-10"
+
+requirements:
+  - id: TEAMS-1#1
+    kind: functional
+    text: "Anyone who opens the app creates a team by giving it a name."
+    prod:
+      signal: "a team is created"
+      match: {event: TeamCreated}
+      min: 5
+  - id: TEAMS-1#2
+    kind: functional
+    text: "After creating a team, the person sees it first in the list of teams on the same page, and the form is empty again."
+    prod:
+      signal: "the list of teams is shown"
+      match: {route: "GET /api/teams", status: 200}
+      min: 5
+  - id: TEAMS-1#3
+    kind: constraint
+    text: "A team name is required and is at most 60 characters once the spaces at both ends are trimmed; two teams cannot have names that differ only in case."
+  - id: TEAMS-1#4
+    kind: constraint
+    text: "When the name is refused, the person reads \"Enter a team name\" for an empty name, \"A team name can be up to 60 characters\" for a long one, and \"A team with this name already exists\" for a taken one."
+
+questions:
+  - id: TEAMS-1?1
+    reason: R1
+    text: "Who may create a team? The app has no accounts yet."
+    answer: "Anyone who opens the app; accounts and permissions come with a later feature."
+  - id: TEAMS-1?2
+    reason: R1
+    text: "What makes a team name valid: is it required, and how long may it be? May two teams have the same name?"
+    answer: "Required, at most 60 characters after trimming the spaces at both ends, unique ignoring case."
+  - id: TEAMS-1?3
+    reason: R3
+    text: "Where does the person see a team after creating it?"
+    answer: "First in the list of teams on the same page, newest first; the form is cleared."
+  - id: TEAMS-1?4
+    reason: R1
+    text: "What does the person read when the name is refused?"
+    answer: "Empty: Enter a team name. Too long: A team name can be up to 60 characters. Taken: A team with this name already exists."
