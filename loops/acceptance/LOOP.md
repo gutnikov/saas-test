@@ -2,7 +2,7 @@
 id: acceptance
 title: "Acceptance loop: every approved requirement goes from red to green, its spec and tests untouched"
 type: acceptance-loop
-status: validated
+status: active
 trigger: [ci]
 places: [delivery/oracle, delivery/gate]
 run: ./run

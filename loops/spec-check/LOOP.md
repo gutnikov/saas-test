@@ -2,7 +2,7 @@
 id: spec-check                   # the folder name under loops/
 title: "Spec check: the spec stays whole, and every test obligation has an example"
 type: spec-check            # from the plugin's loop-types/index.yaml, or custom
-status: validated
+status: active
 trigger: [ci]                     # edit | local | commit | ci | preview | staging | production | scheduled | task | sprint | continuous
 places: [delivery/oracle]                      # where it stands in the super-loops, as <super-loop>/<phase>: delivery/confirmation
 run: ./run                      # one command; exit 0 = passes, non-zero = fires; machine-readable output

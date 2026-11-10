@@ -4,7 +4,7 @@ loops:
   - id: acceptance
     title: "Acceptance loop: every approved requirement goes from red to green, its spec and tests untouched"
     type: acceptance-loop
-    status: validated
+    status: active
     trigger: [ci]
     places: [delivery/oracle, delivery/gate]
     validation: cases
@@ -19,7 +19,7 @@ loops:
   - id: spec-check
     title: "Spec check: the spec stays whole, and every test obligation has an example"
     type: spec-check
-    status: validated
+    status: active
     trigger: [ci]
     places: [delivery/oracle]
     validation: cases
